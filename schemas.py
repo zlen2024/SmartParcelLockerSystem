@@ -42,7 +42,7 @@ class ParcelBase(BaseModel):
     hasPenalty: bool = False
 
 class ParcelCreate(ParcelBase):
-    pass
+    studentID: str
 
 class ParcelResponse(ParcelBase):
     parcelID: int

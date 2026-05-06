@@ -170,8 +170,34 @@ async function updateStatus(parcelId, newStatus) {
     }
 }
 
+// --- Admin Profile Display ---
+function displayAdminProfile() {
+    const adminName = localStorage.getItem('adminName');
+    if (!adminName) {
+        // Not logged in — redirect to staff login
+        window.location.href = "staff_login.html";
+        return;
+    }
+    
+    // Update all profile links in the header
+    const profileLinks = document.querySelectorAll('.admin-links');
+    profileLinks.forEach(container => {
+        container.innerHTML = `
+            <span style="color: #4CAF50; font-weight: bold;">👤 ${adminName}</span>
+            <a href="#" onclick="adminLogout()">LOGOUT</a>
+        `;
+    });
+}
+
+function adminLogout() {
+    localStorage.removeItem('adminName');
+    localStorage.removeItem('adminID');
+    window.location.href = "staff_login.html";
+}
+
 // Initial Data Load
 async function loadAdminData() {
+    displayAdminProfile();
     loadRequestTable();
     loadParcelTable();
     loadMonitorTable();

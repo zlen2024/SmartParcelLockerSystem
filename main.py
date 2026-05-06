@@ -13,6 +13,34 @@ import models, schemas
 # Create DB tables
 Base.metadata.create_all(bind=engine)
 
+# Seed default admin accounts
+def seed_admins():
+    from database import SessionLocal
+    db = SessionLocal()
+    try:
+        # Only seed if no admins exist
+        if db.query(models.Admin).count() == 0:
+            # Admin 1
+            admin_user1 = models.User(name="Admin 1", email="admin1@gmail.com", password="admin1")
+            db.add(admin_user1)
+            db.commit()
+            db.refresh(admin_user1)
+            db.add(models.Admin(userID=admin_user1.userID))
+            
+            # Admin 2
+            admin_user2 = models.User(name="Admin 2", email="admin2@gmail.com", password="admin2")
+            db.add(admin_user2)
+            db.commit()
+            db.refresh(admin_user2)
+            db.add(models.Admin(userID=admin_user2.userID))
+            
+            db.commit()
+            print("[SEED] Created Admin 1 (admin1@gmail.com / admin1) and Admin 2 (admin2@gmail.com / admin2)")
+    finally:
+        db.close()
+
+seed_admins()
+
 app = FastAPI(title="Pick N Go - Smart Locker API (V2)")
 
 # Add CORS support
@@ -83,7 +111,26 @@ def login_user(data: schemas.UserLogin, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=401, detail="Invalid email or password")
     
-    return {"message": "Login successful", "name": user.name}
+    # Check if user is a customer
+    customer = db.query(models.Customer).filter(models.Customer.userID == user.userID).first()
+    return {"message": "Login successful", "name": user.name, "studentID": customer.studentID if customer else None}
+
+@app.post("/admin/login")
+def admin_login(data: schemas.UserLogin, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(
+        models.User.email == data.email,
+        models.User.password == data.password
+    ).first()
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    
+    # Verify this user is an admin
+    admin = db.query(models.Admin).filter(models.Admin.userID == user.userID).first()
+    if not admin:
+        raise HTTPException(status_code=403, detail="This account is not an admin")
+    
+    return {"message": "Login successful", "adminID": admin.adminID, "name": user.name}
 
 def generate_random_pin():
     return str(random.randint(1000, 9999))
@@ -115,7 +162,7 @@ def assign_parcel(parcel: schemas.ParcelCreate, db: Session = Depends(get_db)):
     # Note: We assume studentID is provided via some context or mock for now
     # In a real app, we'd look up the customer
     db_request = models.Request(
-        studentID="0000", # Mock student ID for now
+        studentID=parcel.studentID,
         parcelID=db_parcel.parcelID,
         requestStatus="Stored",
         approvedByAdmin=True

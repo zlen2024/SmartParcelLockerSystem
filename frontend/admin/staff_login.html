@@ -10,26 +10,56 @@
     <div class="auth-box">
         <h1>STAFF LOGIN</h1>
         <div class="form-group">
-            <input type="text" id="username" placeholder="ENTER YOUR USERNAME">
+            <select id="adminSelect" style="width: 100%; padding: 12px; background: #333; color: #fff; border: 1px solid #555; border-radius: 5px; font-size: 1rem;">
+                <option value="">-- SELECT ADMIN --</option>
+                <option value="admin1@gmail.com|admin1">ADMIN 1</option>
+                <option value="admin2@gmail.com|admin2">ADMIN 2</option>
+            </select>
         </div>
         <div class="form-group">
             <input type="password" id="password" placeholder="ENTER YOUR PASSWORD">
         </div>
         <button class="btn" onclick="adminLogin()">LOGIN</button>
+        <p id="loginMessage" style="margin-top: 15px; color: red;"></p>
         <div style="margin-top: 20px;">
             <a href="../login.html">Switch to Student Login</a>
         </div>
     </div>
 
     <script>
-        function adminLogin() {
-            const user = document.getElementById('username').value;
-            const pass = document.getElementById('password').value;
-            
-            if(user === "admin" && pass === "admin") {
-                window.location.href = "request_mgmt.html";
-            } else {
-                alert("Invalid Staff Credentials");
+        const API_BASE = "http://127.0.0.1:8000";
+
+        async function adminLogin() {
+            const select = document.getElementById('adminSelect').value;
+            const passwordInput = document.getElementById('password').value;
+            const msg = document.getElementById('loginMessage');
+
+            if (!select) {
+                msg.innerText = "Please select an admin account.";
+                return;
+            }
+
+            const [email, defaultPass] = select.split('|');
+            const password = passwordInput || defaultPass;
+
+            try {
+                const response = await fetch(`${API_BASE}/admin/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Store admin info in localStorage for the dashboard
+                    localStorage.setItem('adminName', data.name);
+                    localStorage.setItem('adminID', data.adminID);
+                    window.location.href = "request_mgmt.html";
+                } else {
+                    msg.innerText = data.detail || "Invalid credentials.";
+                }
+            } catch (err) {
+                msg.innerText = "Server connection failed.";
             }
         }
     </script>
