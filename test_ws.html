@@ -29,7 +29,7 @@
             // Check command
             var data = JSON.parse(event.data);
             if(data.action === "OPEN") {
-                alert("KLICK! Solenoid " + data.locker_id + " triggered.");
+                alert("KLICK! Solenoid " + data.lockerID + " triggered.");
             }
         };
         
@@ -39,7 +39,7 @@
         };
         
         function triggerAlarm() {
-            ws.send(JSON.stringify({action: "ALARM_TRIGGERED", locker_id: 1}));
+            ws.send(JSON.stringify({action: "ALARM_TRIGGERED", lockerID: 1}));
             alert("Alarm sent to server");
         }
     </script>

@@ -47,6 +47,20 @@
     </div>
 
     <script>
+        window.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            const lockerID = params.get('lockerID') || params.get('locker');
+            const lockerInput = document.getElementById('emLockerID');
+            if (lockerInput) {
+                if (lockerID) {
+                    lockerInput.value = lockerID;
+                } else {
+                    lockerInput.removeAttribute('readonly');
+                    lockerInput.placeholder = "Locker ID (Enter manually)";
+                }
+            }
+        });
+
         document.getElementById('emergencyForm').addEventListener('submit', (e) => {
             e.preventDefault();
             document.getElementById('emergencyMessage').innerText = "Emergency report submitted successfully. Support will contact you.";

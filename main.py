@@ -2,6 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconn
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
+import os
 import random
 import json
 import uvicorn
@@ -69,7 +70,7 @@ app = FastAPI(title="Pick N Go - Smart Locker API (V2)")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -181,10 +182,40 @@ def create_request(req_data: schemas.RequestCreate, db: Session = Depends(get_db
     db.refresh(db_request)
     return db_request
 
+def check_and_auto_reject_if_full(db: Session):
+    # Check how many lockers are currently occupied
+    occupied_count = 0
+    for lid in [1, 2, 3]:
+        locker = db.query(models.Locker).filter(models.Locker.lockerID == lid).first()
+        if locker and locker.lockerStatus not in ["Available", "Vacant"] and locker.parcelID is not None:
+            occupied_count += 1
+            
+    if occupied_count >= 3:
+        # Find all other pending/available requests
+        pending_requests = db.query(models.Request).filter(
+            models.Request.requestStatus.in_(["Available", "Pending"])
+        ).all()
+        
+        for req in pending_requests:
+            req.requestStatus = "Rejected"
+            student_user = db.query(models.User).join(models.Customer).filter(
+                models.Customer.studentID == req.studentID
+            ).first()
+            to_email = student_user.email if student_user else f"{req.studentID}@student.edu"
+            body = (
+                f"Hello,\n\nYour locker request has been automatically declined because all lockers are currently full.\n"
+                f"Please try again later when space becomes available.\n\nSmart Locker Admin"
+            )
+            send_email_notification(to_email, "Locker Request Auto-Declined (Lockers Full)", body)
+        db.commit()
+
 @app.post("/parcels/", response_model=schemas.ParcelResponse)
 def assign_parcel(parcel: schemas.ParcelCreate, db: Session = Depends(get_db)):
-    # 1. Ensure Locker exists
+    # 1. Ensure Locker exists and is not occupied
     locker = db.query(models.Locker).filter(models.Locker.lockerID == parcel.lockerID).first()
+    if locker and locker.lockerStatus not in ["Available", "Vacant"] and locker.parcelID is not None:
+        raise HTTPException(status_code=400, detail=f"Locker {parcel.lockerID} is already occupied")
+
     if not locker:
         locker = models.Locker(lockerID=parcel.lockerID, lockerStatus="Occupied")
         db.add(locker)
@@ -218,6 +249,9 @@ def assign_parcel(parcel: schemas.ParcelCreate, db: Session = Depends(get_db)):
     
     print(f"[SMS MOCK] Sent PIN {parcel.parcelPIN} for Locker {parcel.lockerID}")
     
+    # Check if all 3 lockers are full and auto-reject others
+    check_and_auto_reject_if_full(db)
+    
     return db_parcel
 
 @app.post("/verify/")
@@ -232,6 +266,9 @@ async def verify_pin(verify: schemas.PinVerify, db: Session = Depends(get_db)):
         
     # Check expiry (72h limit)
     if datetime.utcnow() - parcel.storageTime > timedelta(hours=72):
+        if not parcel.hasPenalty:
+            parcel.hasPenalty = True
+            db.commit()
         raise HTTPException(status_code=400, detail="Parcel expired (72h limit). Please see Admin.")
         
     # Send command to ESP32
@@ -283,14 +320,24 @@ def list_requests(db: Session = Depends(get_db)):
 
 @app.get("/admin/parcels")
 def list_parcels(db: Session = Depends(get_db)):
-    # Join Parcel, Request, and Customer to get studentID and phoneNo
-    results = db.query(models.Parcel, models.Request.studentID, models.Customer.phoneNo, models.Request.requestID)\
+    # Join Parcel, Request, and Customer to get studentID, phoneNo, and requestStatus
+    results = db.query(models.Parcel, models.Request.studentID, models.Customer.phoneNo, models.Request.requestID, models.Request.requestStatus)\
                 .outerjoin(models.Request, models.Parcel.parcelID == models.Request.parcelID)\
                 .outerjoin(models.Customer, models.Request.studentID == models.Customer.studentID)\
                 .all()
     
     response = []
-    for parcel, student_id, phone_no, request_id in results:
+    for parcel, student_id, phone_no, request_id, request_status in results:
+        # Check if overdue and auto-apply penalty
+        is_overdue = False
+        if parcel.storageTime:
+            # Check if request status is still active (Stored or Available or Pending)
+            if request_status in ["Stored", "Available", "Pending", None]:
+                is_overdue = (datetime.utcnow() - parcel.storageTime) > timedelta(hours=72)
+                if is_overdue and not parcel.hasPenalty:
+                    parcel.hasPenalty = True
+                    db.commit()
+
         p_dict = {
             "parcelID": parcel.parcelID,
             "lockerID": parcel.lockerID,
@@ -299,7 +346,8 @@ def list_parcels(db: Session = Depends(get_db)):
             "storageTime": parcel.storageTime.isoformat() if parcel.storageTime else None,
             "studentID": student_id or "Unknown",
             "phoneNo": phone_no or "Unknown",
-            "requestID": request_id or "Unknown"
+            "requestID": request_id or "Unknown",
+            "status": request_status or "Available"
         }
         response.append(p_dict)
     return response
@@ -382,6 +430,11 @@ def approve_request(requestID: int, status_update: dict, db: Session = Depends(g
 
     request.requestStatus = new_status
     db.commit()
+    
+    # Check if all 3 lockers are full and auto-reject others
+    if new_status == "Stored":
+        check_and_auto_reject_if_full(db)
+        
     return {"message": f"Request {requestID} updated to {new_status}"}
 
 
@@ -449,8 +502,13 @@ def get_statistics(db: Session = Depends(get_db)):
         "peak_days": peak_days
     }
 
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
+
 # Mount frontend
 app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    reload_enabled = os.getenv("SMART_LOCKER_RELOAD", "0").lower() in {"1", "true", "yes", "on"}
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=reload_enabled)

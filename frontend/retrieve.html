@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pick N Go - Retrieve Parcel</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
     <a href="index.html" class="logout-link">BACK</a>
 
-    <div class="container auth-box">
+    <div class="container auth-box" id="retrieve-box">
         <h2>ENTER 4 DIGIT PIN</h2>
         
         <form id="retrieveForm">
@@ -26,6 +26,20 @@
         <a id="emergency-btn" href="emergency.html" class="btn" style="display: none; margin-top: 15px; background-color: #ff4d4d; text-align: center; text-decoration: none;">Emergency Form</a>
     </div>
 
-    <script src="app.js"></script>
+    <!-- Success Box (Hidden by default) -->
+    <div class="success-card" id="success-box" style="display: none;">
+        <div class="success-icon">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="10" fill="#2ecc71" fill-opacity="0.2"/>
+                <circle cx="12" cy="12" r="9" stroke="#2ecc71" stroke-width="2"/>
+                <path d="M8 12L11 15L16 9" stroke="#2ecc71" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </div>
+        <h2 style="color: #2ecc71; margin-top: 15px; margin-bottom: 15px; font-size: 1.8rem; font-family: var(--font-heading);">UNLOCKED SUCCESSFULLY</h2>
+        <p style="margin-bottom: 30px; font-size: 1.1rem; color: #EFEFDF; line-height: 1.5;">Unlocked successfully. Thank you for using our service!</p>
+        <a href="index.html" class="btn" style="margin-top: 10px;">DONE</a>
+    </div>
+
+    <script src="app.js?v=4"></script>
 </body>
 </html>

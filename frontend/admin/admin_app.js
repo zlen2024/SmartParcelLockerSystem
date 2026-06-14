@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:8000";
+const API_BASE = (window.location.protocol === 'file:') ? "http://127.0.0.1:8000" : window.location.origin;
 
 // --- Navigation & UI ---
 function showAddModal() {
@@ -17,7 +17,7 @@ async function emergencyOpen() {
     const lockerId = document.getElementById('emergencyLockerId').value;
     const reason = document.getElementById('emergencyReason').value;
 
-    if(!lockerId) {
+    if (!lockerId) {
         console.warn("[admin_app.js] emergencyOpen() aborted: No Locker ID provided.");
         return alert("Please enter a Locker ID");
     }
@@ -76,6 +76,27 @@ function sendNotification(contactNumber) {
     alert(`Notification sent to ${contactNumber}: Your parcel is OVERDUE! Please collect it immediately.`);
 }
 
+async function updateParcelStatus(parcelID, newStatus) {
+    console.log(`[admin_app.js] updateParcelStatus() for parcelID: ${parcelID}, newStatus: ${newStatus}`);
+    try {
+        const response = await fetch(`${API_BASE}/admin/parcels/${parcelID}/status`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: newStatus })
+        });
+        if (response.ok) {
+            alert(`Parcel ${parcelID} status updated to ${newStatus}.`);
+            location.reload();
+        } else {
+            const errData = await response.json();
+            alert(errData.detail || "Error updating parcel status.");
+        }
+    } catch (err) {
+        console.error(err);
+        alert("Network error. Please try again.");
+    }
+}
+
 // --- Data Loading Logic ---
 
 async function loadRequestTable() {
@@ -89,7 +110,7 @@ async function loadRequestTable() {
     try {
         const response = await fetch(`${API_BASE}/admin/requests`);
         const requests = await response.json();
-        
+
         tbody.innerHTML = requests.map(r => {
             const status = r.requestStatus;
             let actionButtons = "";
@@ -97,10 +118,6 @@ async function loadRequestTable() {
             if (status === 'Available' || status === 'Pending') {
                 actionButtons = `
                     <button onclick="approveRequest('${r.requestID}', 'Stored')" style="cursor:pointer; background:#4CAF50; color:white; border:none; padding:5px 10px; border-radius:3px; margin-right:5px;">Approve</button>
-                    <button onclick="approveRequest('${r.requestID}', 'Rejected')" style="cursor:pointer; background:#f44336; color:white; border:none; padding:5px 10px; border-radius:3px;">Reject</button>
-                `;
-            } else if (status === 'Stored') {
-                actionButtons = `
                     <button onclick="approveRequest('${r.requestID}', 'Rejected')" style="cursor:pointer; background:#f44336; color:white; border:none; padding:5px 10px; border-radius:3px;">Reject</button>
                 `;
             } else {
@@ -117,6 +134,7 @@ async function loadRequestTable() {
                     <td>S${r.studentID}</td>
                     <td>${parcelRef}</td>
                     <td>${new Date(r.timestamp).toLocaleDateString()}</td>
+                    <td><strong>${r.pin || '-'}</strong></td>
                     <td><span style="padding: 4px 8px; border-radius: 4px; color: white; background: ${statusColor}">${displayStatus}</span></td>
                     <td>${actionButtons}</td>
                 </tr>
@@ -139,25 +157,45 @@ async function loadParcelTable() {
     try {
         const response = await fetch(`${API_BASE}/admin/parcels`);
         const parcels = await response.json();
-        
+
         tbody.innerHTML = parcels.map(p => {
             const entryDate = p.storageTime ? new Date(p.storageTime) : null;
             const now = new Date();
             const diffHours = entryDate ? Math.floor(Math.abs(now - entryDate) / (1000 * 60 * 60)) : 0;
             const isOverdue = diffHours >= 72;
-            const statusLabel = isOverdue ? 'Overdue' : 'Complete';
+
+            // Real status determined by request status and expiry
+            const isActive = p.status === 'Stored' || p.status === 'Available' || p.status === 'Pending';
+            let statusLabel = p.status;
+            if (isActive) {
+                statusLabel = isOverdue ? 'Overdue' : 'Stored';
+            }
+
             const dateDisplay = entryDate ? entryDate.toLocaleDateString() : '-';
-            
+
+            // Actions: Only display actions if active
+            let actionButtons = '';
+            if (isActive) {
+                actionButtons = `
+                    <button onclick="sendNotification('${p.phoneNo && p.phoneNo !== "Unknown" ? p.phoneNo : p.studentID}')" style="cursor:pointer; background:#2196F3; color:white; border:none; padding:5px 10px; border-radius:3px; margin-right:5px;">Notify</button>
+                    <button onclick="updateParcelStatus('${p.parcelID}', 'Collected')" style="cursor:pointer; background:#4CAF50; color:white; border:none; padding:5px 10px; border-radius:3px; margin-right:5px;">Collect</button>
+                    <button onclick="updateParcelStatus('${p.parcelID}', 'Removed')" style="cursor:pointer; background:#f44336; color:white; border:none; padding:5px 10px; border-radius:3px;">Remove</button>
+                `;
+            } else {
+                actionButtons = `<span style="color:#888;">—</span>`;
+            }
+
             return `
                 <tr>
                     <td style="padding: 10px; border-bottom: 1px solid #444;">${p.requestID || '-'}</td>
                     <td style="padding: 10px; border-bottom: 1px solid #444;">S${p.studentID}</td>
                     <td style="padding: 10px; border-bottom: 1px solid #444;">P${p.parcelID}</td>
                     <td style="padding: 10px; border-bottom: 1px solid #444;">L${p.lockerID}</td>
+                    <td style="padding: 10px; border-bottom: 1px solid #444;"><strong>${p.parcelPIN || '-'}</strong></td>
                     <td style="padding: 10px; border-bottom: 1px solid #444;">${dateDisplay}</td>
                     <td style="padding: 10px; border-bottom: 1px solid #444;">${statusLabel}</td>
                     <td style="padding: 10px; border-bottom: 1px solid #444;">
-                        <button onclick="sendNotification('${p.phoneNo && p.phoneNo !== "Unknown" ? p.phoneNo : p.studentID}')" style="cursor:pointer; background:#2196F3; color:white; border:none; padding:5px 10px; border-radius:3px;">Notify</button>
+                        ${actionButtons}
                     </td>
                 </tr>
             `;
@@ -178,29 +216,35 @@ async function loadMonitorTable() {
     try {
         const response = await fetch(`${API_BASE}/admin/parcels`);
         const parcels = await response.json();
-        
-        tbody.innerHTML = parcels.map(p => {
+
+        // Filter to only display active parcels inside the lockers
+        const activeParcels = parcels.filter(p => p.status === 'Stored' || p.status === 'Available' || p.status === 'Pending');
+
+        tbody.innerHTML = activeParcels.map(p => {
             const entryDate = new Date(p.storageTime);
             const now = new Date();
             const diffTime = Math.abs(now - entryDate);
             const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-            
+            const isOverdue = (diffTime / (1000 * 60 * 60)) >= 72;
+            const statusLabel = isOverdue ? 'Overdue' : 'Active';
+            const statusClass = isOverdue ? 'status-overdue' : 'status-active';
+
             return `
                 <tr>
                     <td>L${p.lockerID}</td>
                     <td>P${p.parcelID}</td>
                     <td>S${p.studentID}</td>
                     <td>${entryDate.toLocaleDateString()}</td>
-                    <td>${entryDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
+                    <td>${entryDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
                     <td>${diffDays}</td>
-                    <td><span class="status-tag status-active">Active</span></td>
+                    <td><span class="status-tag ${statusClass}">${statusLabel}</span></td>
                     <td>${p.hasPenalty ? 'Penalty Applied' : '-'}</td>
                     <td>
                         <button onclick="sendNotification('${p.phoneNo && p.phoneNo !== "Unknown" ? p.phoneNo : p.studentID}')" style="cursor:pointer; background:#2196F3; color:white; border:none; padding:5px 10px; border-radius:3px;">Notify</button>
                     </td>
                 </tr>
             `;
-        }).join('') || '<tr><td colspan="9">No storage data</td></tr>';
+        }).join('') || '<tr><td colspan="9">No active storage data</td></tr>';
     } catch (err) {
         console.error("Failed to load monitor data:", err);
     }
@@ -239,7 +283,7 @@ function displayAdminProfile() {
         window.location.href = "staff_login.html";
         return;
     }
-    
+
     // Update all profile links in the header
     const profileLinks = document.querySelectorAll('.admin-links');
     profileLinks.forEach(container => {
@@ -264,7 +308,7 @@ async function loadAdminData() {
     loadRequestTable();
     loadParcelTable();
     loadMonitorTable();
-    if(document.getElementById('lockerGrid')) {
+    if (document.getElementById('lockerGrid')) {
         loadLockerDashboard();
     }
 }
@@ -284,7 +328,7 @@ async function loadLockerDashboard() {
         ]);
         const lockers = await lockersRes.json();
         const parcels = await parcelsRes.json();
-        
+
         grid.style.display = "grid";
         grid.style.gridTemplateColumns = "repeat(3, 1fr)";
         grid.style.gap = "20px";
@@ -293,16 +337,16 @@ async function loadLockerDashboard() {
         grid.innerHTML = fixedLockers.map(id => {
             const l = lockers.find(locker => locker.lockerID === id) || { lockerStatus: "Vacant" };
             let status = l.lockerStatus === "Available" ? "Vacant" : l.lockerStatus;
-            
+
             let icon = "🟢";
             let pInfo = "";
-            let cardColor = "#4CAF50"; // Green for Vacant
+            let lockerClass = "available";
 
             if (status === "Occupied" || status === "Stored") {
                 status = "Stored";
                 icon = "📦";
-                cardColor = "#f44336"; // Red for Stored
-                
+                lockerClass = "occupied";
+
                 const p = parcels.find(parcel => parcel.lockerID === id && parcel.parcelID === l.parcelID);
                 if (p && p.storageTime) {
                     const entryDate = new Date(p.storageTime);
@@ -310,21 +354,21 @@ async function loadLockerDashboard() {
                     if (diffHours >= 72) {
                         status = "Overdue";
                         icon = "⚠️";
-                        cardColor = "#f44336"; // Red for Overdue
+                        lockerClass = "alarm";
                     }
                 }
                 pInfo = l.parcelID ? `<p style="margin-top: 5px; color: #fff;">Parcel ID: P${l.parcelID}</p>` : '';
             } else if (status === "Alarm") {
                 icon = "🚨";
-                cardColor = "#f44336";
+                lockerClass = "alarm";
             }
-            
+
             return `
-                <div class="locker-card" style="background: #2a2a2a; border: 2px solid ${cardColor}; padding: 20px; border-radius: 8px; text-align: center; color: white;">
-                    <div class="locker-icon" style="font-size: 3rem; margin-bottom: 15px;">${icon}</div>
+                <div class="locker-card ${lockerClass}">
+                    <div class="locker-icon">${icon}</div>
                     <div class="locker-info">
-                        <h3 style="margin: 0 0 10px 0; font-size: 1.5rem;">Locker ${id}</h3>
-                        <p style="font-weight: bold; color: ${cardColor}; margin: 0; font-size: 1.2rem;">${status}</p>
+                        <h3>Locker ${id}</h3>
+                        <p style="font-weight: bold; text-transform: uppercase;">${status}</p>
                         ${pInfo}
                     </div>
                 </div>
@@ -347,7 +391,7 @@ function loadSidebar() {
     const page = path.split('/').pop() || 'dashboard.html';
 
     const adminName = localStorage.getItem('adminName');
-    
+
     const navItems = [
         { href: 'dashboard.html', label: 'DASHBOARD' },
         { href: 'request_mgmt.html', label: 'MANAGE REQUEST' },
