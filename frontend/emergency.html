@@ -47,6 +47,8 @@
     </div>
 
     <script>
+        const API_BASE = (window.location.protocol === 'file:') ? "http://127.0.0.1:8000" : window.location.origin;
+
         window.addEventListener('DOMContentLoaded', () => {
             const params = new URLSearchParams(window.location.search);
             const lockerID = params.get('lockerID') || params.get('locker');
@@ -61,11 +63,43 @@
             }
         });
 
-        document.getElementById('emergencyForm').addEventListener('submit', (e) => {
+        document.getElementById('emergencyForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            document.getElementById('emergencyMessage').innerText = "Emergency report submitted successfully. Support will contact you.";
-            document.getElementById('emergencyMessage').style.color = "green";
-            e.target.reset();
+            
+            const name = document.getElementById('emName').value;
+            const studentID = document.getElementById('emStudentID').value;
+            const lockerID = parseInt(document.getElementById('emLockerID').value);
+            const issue = document.getElementById('emIssue').value;
+            const msgEl = document.getElementById('emergencyMessage');
+
+            msgEl.innerText = "Submitting...";
+            msgEl.style.color = "white";
+
+            try {
+                const response = await fetch(`${API_BASE}/emergency/report`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        studentID: studentID,
+                        lockerID: lockerID,
+                        issue: issue
+                    })
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    msgEl.innerText = "Emergency report submitted successfully. Support will contact you.";
+                    msgEl.style.color = "green";
+                    e.target.reset();
+                } else {
+                    msgEl.innerText = data.detail || "Error submitting emergency report.";
+                    msgEl.style.color = "red";
+                }
+            } catch (err) {
+                console.error(err);
+                msgEl.innerText = "Connection failed. Please check if the server is running.";
+                msgEl.style.color = "red";
+            }
         });
     </script>
 </body>

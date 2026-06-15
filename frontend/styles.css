@@ -380,3 +380,9 @@ input::placeholder {
     }
 }
 
+.grayed-out-row {
+    opacity: 0.4;
+    filter: grayscale(1);
+    background-color: rgba(255, 255, 255, 0.02) !important;
+}
+

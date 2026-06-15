@@ -93,3 +93,8 @@ class CustomerRegister(BaseModel):
 class UserLogin(BaseModel):
     email: str
     password: str
+
+class EmergencyReport(BaseModel):
+    studentID: str
+    lockerID: int
+    issue: str
