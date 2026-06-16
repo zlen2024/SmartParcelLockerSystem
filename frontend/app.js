@@ -29,7 +29,7 @@ async function checkServerStatus() {
         if (res.ok) {
             banner.style.background = '#1a6b3a';
             banner.style.color = '#d4f7e2';
-            banner.textContent = '✅ Server connected — http://127.0.0.1:8000';
+            banner.textContent = `✅ Server connected — ${API_BASE}`;
             banner.style.opacity = '1';
             // Fade out after 3 seconds when ok
             setTimeout(() => { banner.style.opacity = '0'; }, 3000);
