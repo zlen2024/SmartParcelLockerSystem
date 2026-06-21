@@ -1,0 +1,39 @@
+# Version control
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Node
+node_modules/
+
+# Local databases (will use /data volume on Fly)
+*.db
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Environment (secrets set via fly secrets)
+.env
+
+# Hardware firmware (not needed on server)
+esp32_firmware/
+
+# Dev/test files
+tests/
+test_ws.html
+start_server.bat
+plan.md
+
+# Images not needed in container (optional — remove if you need them)
+# bgLocker1.png
+# locker.png

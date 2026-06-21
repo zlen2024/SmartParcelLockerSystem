@@ -1,0 +1,37 @@
+# ──────────────────────────────────────────────────────────────
+#  fly.toml – Fly.io configuration for Pick N Go
+#  Docs: https://fly.io/docs/reference/configuration/
+# ──────────────────────────────────────────────────────────────
+
+app = "pick-n-go-locker"
+primary_region = "sin"            # Singapore – closest to Malaysia
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  DATABASE_URL = "sqlite:////data/pickngo_v2.db"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 25
+    soft_limit = 20
+
+[[http_service.checks]]
+  grace_period = "10s"
+  interval = "30s"
+  method = "GET"
+  path = "/health"
+  timeout = "5s"
+
+# Persistent volume for SQLite database
+[mounts]
+  source = "pickngo_data"
+  destination = "/data"
